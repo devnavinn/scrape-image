@@ -2,7 +2,6 @@ const express = require('express')
 const puppeteer = require('puppeteer')
 const axios = require('axios')
 const archiver = require('archiver')
-
 const app = express()
 const PORT = 3000
 
@@ -19,6 +18,7 @@ app.get('/scrape-images', async (req, res) => {
         const imageUrls = await page.evaluate(() => {
             const urls = new Set()
 
+            // Handle all <img> tags
             document.querySelectorAll('img').forEach((img) => {
                 if (img.srcset) {
                     const srcList = img.srcset.split(',').map(s => s.trim())
@@ -30,7 +30,7 @@ app.get('/scrape-images', async (req, res) => {
                         if (parts.length < 2) return
                         const url = parts[0]
                         const scaleStr = parts[1]
-                        const scale = parseFloat(scaleStr?.replace('x', '')) || 0
+                        const scale = parseFloat(scaleStr?.replace('x', '').replace('w', '')) || 0
 
                         if (scale > bestScale && url.includes('behance.net/project_modules')) {
                             bestScale = scale
@@ -38,15 +38,39 @@ app.get('/scrape-images', async (req, res) => {
                         }
                     })
 
-
                     if (bestSrc) urls.add(bestSrc)
                 } else if (img.src.includes('behance.net/project_modules')) {
                     urls.add(img.src)
                 }
             })
 
+            // Handle <source> tags inside <picture>
+            document.querySelectorAll('picture source').forEach((source) => {
+                if (source.srcset) {
+                    const srcList = source.srcset.split(',').map(s => s.trim())
+                    let bestSrc = ''
+                    let bestScale = 0
+
+                    srcList.forEach(entry => {
+                        const parts = entry.trim().split(' ')
+                        if (parts.length < 2) return
+                        const url = parts[0]
+                        const scaleStr = parts[1]
+                        const scale = parseFloat(scaleStr?.replace('x', '').replace('w', '')) || 0
+
+                        if (scale > bestScale && url.includes('behance.net/project_modules')) {
+                            bestScale = scale
+                            bestSrc = url
+                        }
+                    })
+
+                    if (bestSrc) urls.add(bestSrc)
+                }
+            })
+
             return Array.from(urls)
         })
+
 
         await browser.close()
 
